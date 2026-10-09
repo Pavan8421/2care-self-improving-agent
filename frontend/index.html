@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clinic Scheduling Agent</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header>
+        <h1>Clinic Scheduling</h1>
+        <p>Multi-turn patient appointment agent</p>
+      </header>
+      <section id="messages" aria-live="polite"></section>
+      <form id="composer">
+        <input id="input" type="text" placeholder="Message the scheduling agent…" autocomplete="off" />
+        <button type="submit">Send</button>
+      </form>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
