@@ -2,7 +2,7 @@
 
 **Scope:** weekend take-home (6–8h ceiling).  
 **Stack:** Python, LangChain, LangGraph, OpenAI, FastAPI, tiny web UI.  
-**Status:** design locked; implementation follows this doc.
+**Status:** Phases 0–7 implemented; this doc is the living design.
 
 ---
 
@@ -31,7 +31,7 @@ We are not building voice, a real EHR, or a large multi-clinic product. Judgment
 | Emergency | Fixed escalate script + `escalate` tool; stop booking that turn |
 | Eval patient | LLM-as-patient for harness; humans use the web UI |
 | Models | OpenAI (`AGENT_MODEL`, `PATIENT_MODEL`) |
-| Improvement apply | Append prompt/policy **and** harden tool guards in code |
+| Improvement apply | Shadow-test prompt patches in memory; commit upsert/`system_replace` only if suite all-green; guards stay authoritative in code |
 
 If real clinics differ (authorization for proxies, local emergency numbers), that is out of scope; noted here as a deliberate simplification.
 
@@ -76,9 +76,18 @@ data/                       # Optional fixtures
 
 ## 4. Agent design
 
-### 4.1 Role
+### 4.1 Design principle
 
-The LLM is the **dialogue layer**. Truth lives in the clinic store and tools. The orchestrator keeps **explicit session state** and enforces gates so the model cannot silently skip verification, soft confirm, or policy.
+**Dialogue ≠ truth.** The LLM talks to the patient; the clinic store and tools decide what is real. Anything that must never be skipped (verify, soft-confirm, relationship, 24h cancel, slot still free) is enforced in **code guards**, not left to prompt compliance alone.
+
+That split is intentional:
+
+| Layer | Owns | Must not own |
+|---|---|---|
+| Prompt (`system.md` + `improvements.md`) | Tone, phase order, recovery narratives, “never invent slots” | Final authority on booking legality |
+| Session state | Verified patient, pending slot, soft-confirm, tool_trace | Inventing patients or slots |
+| Tools + guards | Mutations and rejections with structured errors | Freeform chat |
+| Store + policy | Seeded patients, availability, 24h window | Empathy / clarification |
 
 ### 4.2 Architecture
 
@@ -99,17 +108,23 @@ Patient (web UI or LLM simulator)
 └─────────────────────────────────────┘
 ```
 
+Same graph powers the web UI (`SessionManager` + FastAPI) and the eval harness (LLM patient simulator). Eval can inject a **`prompt_override`** string so shadow trials never touch disk prompts until commit.
+
 ### 4.3 LangGraph shape
 
 Minimal graph (avoid sprawling FSMs):
 
-1. **`agent_node`** — OpenAI chat model with bound tools; reads `system.md` + `improvements.md` + state summary.  
-2. **`tools_node`** — Executes tool calls through guards.  
+1. **`agent_node`** — OpenAI chat model with bound tools; system prompt = `system.md` + applied `improvements.md` (or override).  
+2. **`tools_node`** — Executes tool calls through an `AgentToolContext` that carries session flags into guards.  
 3. Loop until the model responds without tool calls (or escalate ends the productive path).
 
-Optional thin pre-commit checks live **inside tool guards**, not as many graph nodes, so the weekend graph stays readable.
+Pre-commit checks live **inside tool guards**, not as many graph nodes, so the weekend graph stays readable. Soft-confirm is a first-class tool (`confirm_slot`) so the harness can see it in `tool_trace`.
 
-### 4.4 Session state
+### 4.4 Why not a big FSM?
+
+Phases (identify → constraints → offer → confirm → book) are **prompt guidance** plus state fields, not hard graph edges. Real conversations skip and revisit steps; a rigid FSM fights that. We encode only the **non-negotiables** as guards: no book without verify + soft-confirm + relationship; cancel/reschedule respect policy; book always re-checks availability.
+
+### 4.5 Session state
 
 Maintained in graph state (and returned to the client for debugging/eval):
 
@@ -127,18 +142,18 @@ Maintained in graph state (and returned to the client for debugging/eval):
 | `safety_flags` | e.g. `medical_advice`, `emergency` |
 | `tool_trace` | Calls + results for scoring |
 
-### 4.5 Dialogue policy (phases)
+### 4.6 Dialogue policy (phases)
 
 1. **Identify** — Collect name + DOB of who will attend; `get_patient`.  
 2. **Relationship** — If booker ≠ attendee wording, require a short relationship note before booking.  
 3. **Intent** — Book / cancel / reschedule.  
 4. **Constraints** — Clarify vague times (“sometime next week”) before lookup.  
 5. **Offer** — `lookup_slots`; present only returned slots.  
-6. **Soft confirm** — “Shall I book Tuesday 3:00 PM?”  
+6. **Soft confirm** — `confirm_slot` after the patient agrees.  
 7. **Commit** — `book` / `cancel` / `reschedule`.  
 8. **Close** — Read back tool-confirmed details.
 
-### 4.6 Safety (#6)
+### 4.7 Safety
 
 | Signal | Behavior |
 |---|---|
@@ -147,10 +162,11 @@ Maintained in graph state (and returned to the client for debugging/eval):
 
 Eval **hard-fails** if the agent gives clinical advice or books through an emergency turn.
 
-### 4.7 Prompt layout
+### 4.8 Prompt layout and planted gap
 
 - `system.md` — role, phases, never invent slots/IDs, soft confirm, third-party rule, safety.  
-- `improvements.md` — dated patches from the eval loop, injected with the system prompt.
+- `improvements.md` — **upserted** sections keyed by `failure_mode` (replace, don’t stack forever).  
+- Planted v0 gap: a weak “Slot conflicts” section that tells the model to apologize and stop after `SLOT_TAKEN`, while the tool correctly returns that error. The improvement loop’s job is to replace that guidance and prove the suite stays green.
 
 Prompt states the rules; **tools enforce** them.
 
@@ -234,48 +250,86 @@ scenarios.yaml
 
 ---
 
-## 7. Improvement loop
+## 7. Improvement loop — design rationale
 
-### 7.1 Closed loop (must demo once)
+### 7.1 Problem we are solving
+
+Naïve self-edit (“LLM rewrites the prompt, save to disk, hope”) is dangerous:
+
+1. **Regression** — fixing race recovery can break happy-path or clarify-before-book.  
+2. **Prompt drift** — append-only patches stack contradictory instructions.  
+3. **Flakes** — LLM variance can make a one-off re-run look like a “fix.”  
+4. **Blind faith** — a polite transcript does not prove the DB outcome.
+
+The design therefore treats improvement as **propose → shadow-validate → commit**, not **edit → hope**.
+
+### 7.2 Closed loop (shadow then commit)
 
 ```text
-Run suite (v0)
-  → failure (e.g. slot_taken_race: books stale slot / doesn’t recover)
-  → structured Improvement record
-  → apply: append improvements.md ± tighten guards/policy
-  → re-run full suite
-  → before/after scorecard: failed case passes; prior passes still pass
+Run suite against disk prompts
+  → pick a failing scenario (prefer known planted gap)
+  → build evidence pack (rubric reasons, tool_trace, DB expect)
+  → propose structured patch (RULE_MAP or LLM)
+  → for attempt = 1..3:
+        materialize candidate prompts IN MEMORY
+        re-run FULL suite with prompt_override
+        if all-green → write disk (upsert / system_replace) + audit JSON; stop
+        else if target passed but suite failed → treat as flake; revise or stop
+        else → diagnose_revision(LLM) from trial evidence; next attempt
+  → if no all-green trial: leave disk prompts unchanged
 ```
 
-Plant a deliberate v0 gap (e.g. weak race handling in prompt and/or guard) so the Loom can show the loop honestly.
+| Decision | Why |
+|---|---|
+| **Shadow trials** (`prompt_override`) | Never leave the repo in a half-broken prompt state mid-loop |
+| **Full suite must pass** | Fixing the target while regressing others is a failed improvement |
+| **≤3 attempts** | Bound cost; force structured revision instead of infinite retry |
+| **Upsert by `failure_mode`** | Same bug gets one section, not N contradictory appends |
+| **`system_replace` for planted gap** | The weak “Slot conflicts (v0)” heading must be rewritten, not only overridden |
+| **RULE_MAP first** | Deterministic demo patch for `slot_taken_race`; LLM used for diagnosis/revision |
+| **Audit under `improvements/` + `eval/results/trials/`** | Before/after and each shadow attempt are inspectable |
 
-### 7.2 Structured improvement record
+### 7.3 Structured improvement record
 
 ```json
 {
   "scenario_id": "slot_taken_race",
-  "failure_mode": "booked_stale_slot_or_no_reoffer",
+  "failure_mode": "no_reoffer_after_slot_taken",
   "evidence": {
     "tool_trace_summary": "...",
     "db_before_after": "...",
     "rubric_reasons": ["..."]
   },
   "patch": {
-    "prompt_append": "If book fails because the slot is taken, call lookup_slots again and offer alternatives; never invent slots.",
-    "guard_change": "Ensure book() always re-checks availability and returns SLOT_TAKEN.",
+    "section_upsert": {
+      "failure_mode": "no_reoffer_after_slot_taken",
+      "markdown": "### OVERRIDE — Slot conflicts\n..."
+    },
+    "system_replace": {
+      "heading": "## Slot conflicts (v0)",
+      "new_body": "..."
+    },
+    "guard_change": "book() re-checks availability; returns SLOT_TAKEN (code already enforces).",
     "policy_change": null
   },
-  "regression_suite": ["happy_path_book", "slot_taken_race", "..."]
+  "regression_suite": ["happy_path_book", "slot_taken_race", "..."],
+  "source": "rule_map"
 }
 ```
 
-Written under `backend/improvements/` for audit; prompt text merged into `improvements.md`.
+`--improve --propose` stops after diagnosis (no trials).  
+`--improve --apply` runs the shadow loop and commits only on all-green.
 
-### 7.3 What we will not do
+### 7.4 Flake handling
+
+If the **target** scenario passes in a shadow trial but the suite is not all-green, that is treated as a likely **flake** (LLM variance elsewhere), not as proof the patch is wrong. The loop records the trial, may revise once more with that evidence, and still refuses to commit unless a later trial is fully green.
+
+### 7.5 What we will not do
 
 - Fine-tune a model  
 - Regenerate the entire system prompt from scratch with no structure  
-- “Try harder” freeform feedback without regression re-run  
+- Write patches to disk before a green shadow suite  
+- “Try harder” freeform feedback without a scored re-run  
 
 ---
 
@@ -292,7 +346,7 @@ Single-page chat: message list + composer, calling `POST /api/chat` (session id)
 | Runnable agent | `scripts/run_agent.sh` → FastAPI + UI |
 | Eval loop command | `scripts/run_eval.sh` → harness ± `--improve` |
 | Loom | Manual chat + one failing eval → patch → re-run score delta |
-| Design note ≤1 page | This doc (trim to one page for submission packet if required; repo keeps full version) |
+| Design note ≤1 page | `docs/DESIGN_NOTE_1P.md` (pointer to this full DESIGN.md) |
 | AI vs judgment | Note in submission: AI for scaffolding/boilerplate; human judgment on scenarios, rubric weights, guards, third-party/verify rules, refusing transcript-only scoring |
 
 ---

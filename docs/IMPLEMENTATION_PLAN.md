@@ -2,7 +2,7 @@
 
 **Goal:** Ship a runnable scheduling agent, eval harness, and one closed improvement loop within a weekend ceiling (~6–8h).  
 **Source of truth for behavior:** [DESIGN.md](./DESIGN.md).  
-**Overall status:** Phases 0–6 done; Phase 7 not started.
+**Overall status:** Phases 0–7 done.
 
 Each phase lists **status**, **what we work on**, **files touched**, **exit criteria**, and a rough time box. Do not start the next phase until the exit criteria pass. Update **Status** to `Done` only when that phase’s exit criteria are met.
 
@@ -245,33 +245,29 @@ Each phase lists **status**, **what we work on**, **files touched**, **exit crit
 
 ---
 
-## Phase 7 — Scripts, docs polish, demo prep
+## Phase 7 — Scripts, docs polish
 
-**Status:** Not done
+**Status:** Done
 
 ### What we work on
 - Finalize `scripts/run_agent.sh` and `scripts/run_eval.sh` (true one-command runners)
-- Update `README.md`: setup, two commands, short architecture blurb
-- Trim or add a **1-page design note** for submission if needed (pointer to full DESIGN.md OK)
-- Add short “AI vs judgment” note in README or design note
-- Demo checklist for Loom (script of what to show)
+- Update `README.md`: setup, two commands, **phase-by-phase** explanation, architecture
+- 1-page design note (`docs/DESIGN_NOTE_1P.md`) + expand `DESIGN.md` agent + improvement-loop design
+- “AI vs judgment” note in README / design note
+- No separate demo script (Loom can follow README commands + Design §7)
 
 ### Files
 - `scripts/run_agent.sh`
 - `scripts/run_eval.sh`
 - `README.md`
-- Optional: `docs/DESIGN_NOTE_1P.md`, `docs/DEMO_SCRIPT.md`
-
-### Loom checklist
-1. Manual UI: multi-turn book (verify → confirm → book)  
-2. Run eval on v0 → show failure (e.g. race)  
-3. Show structured patch + `improvements.md` / guard change  
-4. Re-run eval → score moves; no regression  
+- `docs/DESIGN_NOTE_1P.md`
+- `docs/DESIGN.md` (agent + shadow-then-commit improvement design)
 
 ### Exit criteria
-- [ ] Two README commands work from a clean shell with `.env` set
-- [ ] Before/after scores captured (screenshot or `results/` JSON)
-- [ ] Ready to record Loom without code changes mid-demo
+- [x] Two README commands work from a clean shell with `.env` set
+- [x] Before/after / trial artifacts under `eval/results/` and `improvements/`
+- [x] README explains each phase; DESIGN.md explains agent + improvement-loop design
+- [x] No `DEMO_SCRIPT.md`
 
 ---
 
@@ -291,7 +287,7 @@ Phase 5 (eval + rubric)
    ↓
 Phase 6 (improve loop)
    ↓
-Phase 7 (polish + demo)
+Phase 7 (polish + docs)
 ```
 
 ---
