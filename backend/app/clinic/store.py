@@ -298,7 +298,7 @@ class ClinicStore:
         if slot.taken:
             return StoreError(
                 code="SLOT_TAKEN",
-                message="That slot is no longer available. Look up alternatives.",
+                message="That slot is no longer available.",
             ).to_dict()
 
         # One active booking per patient (keeps demo clinic simple).
@@ -415,7 +415,7 @@ class ClinicStore:
         if new_slot.taken:
             return StoreError(
                 code="SLOT_TAKEN",
-                message="That slot is no longer available. Look up alternatives.",
+                message="That slot is no longer available.",
             ).to_dict()
 
         old_slot.taken = False

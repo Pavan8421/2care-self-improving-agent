@@ -19,5 +19,9 @@ data/*.json
 !data/.gitkeep
 backend/improvements/*.json
 !backend/improvements/.gitkeep
-backend/eval/results/
+backend/eval/results/*
+!backend/eval/results/.gitkeep
+!backend/eval/results/trials/
+backend/eval/results/trials/*
+!backend/eval/results/trials/.gitkeep
 *.log

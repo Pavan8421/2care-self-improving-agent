@@ -38,6 +38,7 @@ def main() -> int:
     _assert(set(tools) >= {
         "get_patient",
         "lookup_slots",
+        "confirm_slot",
         "book",
         "get_booking",
         "check_policy",
@@ -76,7 +77,8 @@ def main() -> int:
     print("ok: book without soft confirm blocked")
 
     # Soft confirm + book succeeds
-    ctx.mark_soft_confirmed(far["slot_id"])
+    conf = _invoke(tools, "confirm_slot", slot_id=far["slot_id"])
+    _assert(conf["ok"] is True and ctx.soft_confirmed, conf)
     booked = _invoke(
         tools,
         "book",

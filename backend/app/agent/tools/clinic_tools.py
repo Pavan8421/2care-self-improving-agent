@@ -45,6 +45,31 @@ def build_clinic_tools(ctx: AgentToolContext) -> list[StructuredTool]:
         )
         return _dumps(result)
 
+    def confirm_slot(slot_id: str) -> str:
+        """Record soft confirmation for slot_id after the patient agrees to that exact slot."""
+        if err := require_not_escalated(ctx):
+            return _dumps(err)
+        slot_clean = (slot_id or "").strip()
+        if not slot_clean:
+            return _dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "INVALID_SLOT",
+                        "message": "slot_id is required for soft confirmation.",
+                    },
+                }
+            )
+        ctx.mark_soft_confirmed(slot_clean)
+        return _dumps(
+            {
+                "ok": True,
+                "soft_confirmed": True,
+                "slot_id": slot_clean,
+                "message": "Soft confirmation recorded. You may now call book or reschedule.",
+            }
+        )
+
     def book(slot_id: str, patient_id: str, relationship: str) -> str:
         """Book a slot after patient verify + soft confirm. relationship is 'self' or a note."""
         if err := guard_book(
@@ -158,6 +183,14 @@ def build_clinic_tools(ctx: AgentToolContext) -> list[StructuredTool]:
             description=(
                 "Return free clinic slots. Optional date_from / date_to as ISO datetimes. "
                 "Only offer times from this tool."
+            ),
+        ),
+        StructuredTool.from_function(
+            func=confirm_slot,
+            name="confirm_slot",
+            description=(
+                "Call after the patient explicitly agrees to a specific offered slot_id "
+                "(soft confirm). Required before book or reschedule."
             ),
         ),
         StructuredTool.from_function(

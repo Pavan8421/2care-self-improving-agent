@@ -1,16 +1,237 @@
-/* Tiny chat UI styles — filled out during frontend pass. */
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", system-ui, sans-serif;
+  --bg0: #e8f0ec;
+  --bg1: #f7f3eb;
+  --ink: #1c2b26;
+  --muted: #5a6b64;
+  --line: #c5d4cc;
+  --you: #1f4d3a;
+  --you-fg: #f4faf6;
+  --agent: #ffffff;
+  --agent-fg: #1c2b26;
+  --accent: #c45c26;
+  --danger: #9b2c2c;
+  --shadow: 0 10px 30px rgba(28, 43, 38, 0.08);
+  font-family: "DM Sans", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #d7ebe1 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #f3e2c8 0%, transparent 50%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
 }
 
 #app {
-  max-width: 40rem;
+  max-width: 42rem;
   margin: 0 auto;
-  padding: 1.5rem;
+  min-height: 100vh;
+  padding: 1.25rem 1.25rem 1.5rem;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 0.85rem;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand h1 {
+  margin: 0;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(1.55rem, 3vw, 1.9rem);
+  letter-spacing: -0.02em;
+}
+
+.brand p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.session-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ghost {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ghost:hover {
+  background: #fff;
+}
+
+.messages {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.35rem 0.15rem 0.5rem;
+  min-height: 16rem;
+}
+
+.msg {
+  max-width: min(92%, 34rem);
+  padding: 0.75rem 0.95rem;
+  border-radius: 1rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: var(--shadow);
+  animation: rise 180ms ease-out;
+}
+
+.msg.you {
+  align-self: flex-end;
+  background: var(--you);
+  color: var(--you-fg);
+  border-bottom-right-radius: 0.3rem;
+}
+
+.msg.agent {
+  align-self: flex-start;
+  background: var(--agent);
+  color: var(--agent-fg);
+  border: 1px solid rgba(197, 212, 204, 0.85);
+  border-bottom-left-radius: 0.3rem;
+}
+
+.msg.error {
+  align-self: stretch;
+  background: #fff5f5;
+  color: var(--danger);
+  border: 1px solid #f0c6c6;
+  box-shadow: none;
+}
+
+.msg .who {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.72;
+  margin-bottom: 0.25rem;
+}
+
+.empty {
+  margin: auto;
+  text-align: center;
+  color: var(--muted);
+  max-width: 22rem;
+  line-height: 1.5;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.composer input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 0.8rem 1.05rem;
+  font: inherit;
+  color: var(--ink);
+  outline: none;
+}
+
+.composer input:focus {
+  border-color: #7aa892;
+  box-shadow: 0 0 0 3px rgba(31, 77, 58, 0.12);
+}
+
+.composer button[type="submit"] {
+  appearance: none;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.8rem 1.2rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer button[type="submit"]:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.status {
+  margin: 0;
+  min-height: 1.1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  #app {
+    padding: 1rem;
+  }
+
+  .session-label {
+    display: none;
+  }
 }

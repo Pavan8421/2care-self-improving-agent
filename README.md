@@ -8,7 +8,11 @@ Weekend take-home: a patient appointment scheduling agent (LangChain / LangGraph
 - **Phase 0 (environment):** done  
 - **Phase 1 (clinic store + policy):** done  
 - **Phase 2 (tools + guards):** done  
-- Phases 3–7: not started  
+- **Phase 3 (LangGraph agent + prompts):** done  
+- **Phase 4 (FastAPI + tiny web UI):** done  
+- **Phase 5 (eval harness + rubric):** done  
+- **Phase 6 (improvement loop):** done  
+- Phase 7: not started  
 
 ## Quick layout
 
@@ -27,23 +31,29 @@ Treat **`backend/` as the working directory** (it is on `sys.path` for `app.*` a
 ```bash
 cd backend
 source .venv/bin/activate
-python -m app.main          # later: API + UI
+python -m app.main          # API + UI on APP_HOST:APP_PORT (default 8000)
 python -m eval.harness      # later: eval loop
 python scripts/smoke_phase0.py
+python scripts/smoke_phase4.py
 ```
 
-Root `scripts/run_agent.sh` / `run_eval.sh` will `cd` into `backend` the same way.
+Or from repo root: `./scripts/run_agent.sh` then open http://127.0.0.1:8000/
 
 ## Docs
 
 - [Design document](docs/DESIGN.md) — agent, tools, eval harness, improvement loop, assumptions
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md) — phase-by-phase build order and exit criteria
 
-## Intended commands (after later phases)
+## Commands
 
 ```bash
-./scripts/run_agent.sh   # chat UI + API
-./scripts/run_eval.sh    # score scenarios, apply improvement, re-run
+./scripts/run_agent.sh   # chat UI + API → http://127.0.0.1:8000/
+./scripts/run_eval.sh    # score scenarios → backend/eval/results/latest.json
+./scripts/run_eval.sh --improve --propose   # diagnose only (no disk writes)
+./scripts/run_eval.sh --improve --apply     # up to 3 shadow trials; commit only if all-green
+# Shadow trials use in-memory prompts (disk unchanged until a trial passes 7/7).
+# Trial logs: backend/eval/results/trials/trial_00N.json
+# or: cd backend && python -m eval.harness -v
 ```
 
 ## Setup (Phase 0)
@@ -57,6 +67,8 @@ cp .env.example .env
 # Edit .env and set a real OPENAI_API_KEY (required from Phase 3 onward)
 
 python scripts/smoke_phase0.py
+python scripts/smoke_phase3.py   # structure always; live multi-turn if key set
+python -m app.agent.cli          # interactive scheduling chat (needs real key)
 ```
 
 Expected smoke output includes `smoke_imports=ok`. If the key is still a placeholder you will see `key_present=no` — set `OPENAI_API_KEY` in `backend/.env` before agent/eval work.

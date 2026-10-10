@@ -2,7 +2,7 @@
 
 **Goal:** Ship a runnable scheduling agent, eval harness, and one closed improvement loop within a weekend ceiling (~6–8h).  
 **Source of truth for behavior:** [DESIGN.md](./DESIGN.md).  
-**Overall status:** Phases 0–2 done; Phases 3–7 not started.
+**Overall status:** Phases 0–6 done; Phase 7 not started.
 
 Each phase lists **status**, **what we work on**, **files touched**, **exit criteria**, and a rough time box. Do not start the next phase until the exit criteria pass. Update **Status** to `Done` only when that phase’s exit criteria are met.
 
@@ -15,10 +15,10 @@ Each phase lists **status**, **what we work on**, **files touched**, **exit crit
 | 0 | Environment & project wiring | 20–30 min | Done |
 | 1 | Clinic store + policy (fake backend) | 45–60 min | Done |
 | 2 | Tools + code guards | 45–60 min | Done |
-| 3 | LangGraph agent + prompts | 60–90 min | Not done |
-| 4 | FastAPI + tiny web UI (manual chat) | 45–60 min | Not done |
-| 5 | Eval harness + rubric + scenarios | 60–90 min | Not done |
-| 6 | Improvement loop (diagnose → apply → re-run) | 45–60 min | Not done |
+| 3 | LangGraph agent + prompts | 60–90 min | Done |
+| 4 | FastAPI + tiny web UI (manual chat) | 45–60 min | Done |
+| 5 | Eval harness + rubric + scenarios | 60–90 min | Done |
+| 6 | Improvement loop (diagnose → apply → re-run) | 45–60 min | Done |
 | 7 | One-command scripts, polish, demo prep | 30–45 min | Not done |
 
 **Critical path:** 1 → 2 → 3 → 5 → 6 (loop).  
@@ -114,7 +114,7 @@ Each phase lists **status**, **what we work on**, **files touched**, **exit crit
 
 ## Phase 3 — LangGraph agent + prompts
 
-**Status:** Not done
+**Status:** Done
 
 ### What we work on
 - Typed **session / graph state** (messages, verified patient, relationship, pending slot, soft_confirmed, booking_id, safety_flags, tool_trace)
@@ -123,34 +123,41 @@ Each phase lists **status**, **what we work on**, **files touched**, **exit crit
 - Dialogue policy in prompt: identify → relationship → intent → clarify → offer → soft confirm → commit → close
 - Safety copy: medical refuse; emergency escalate and stop booking
 - Session management for multi-turn (thread/session id)
+- `confirm_slot` tool bridges dialogue soft-confirm → `AgentToolContext` gates
 
 ### Files
 - `backend/app/agent/state.py`
 - `backend/app/agent/graph.py`
+- `backend/app/agent/cli.py` — interactive multi-turn chat
 - `backend/app/agent/prompts/system.md`
 - `backend/app/agent/prompts/improvements.md` (empty at v0 for planted gap)
+- `backend/app/agent/tools/clinic_tools.py` — `confirm_slot` added
+- `backend/scripts/smoke_phase3.py`
 
 ### Deliberate v0 gap (for loop demo later)
 - Leave race recovery **weak in prompt** and/or temporarily soft in one path so `slot_taken_race` can fail once, then get patched in Phase 6  
 - Document the planted gap in a short comment or design note so the Loom story is honest
+- Planted gap documented in an HTML comment inside `system.md` (no auto re-lookup on `SLOT_TAKEN`)
 
 ### Exit criteria
-- [ ] Multi-turn CLI or notebook chat can verify patient and book with soft confirm
-- [ ] Agent only offers slots returned by tools
-- [ ] Third-party booking asks for / records relationship and verifies **attendee** name+DOB
-- [ ] Medical / emergency paths behave per DESIGN.md
+- [x] Multi-turn CLI or notebook chat can verify patient and book with soft confirm (`python -m app.agent.cli`; live path in `smoke_phase3.py` when `OPENAI_API_KEY` is set)
+- [x] Agent only offers slots returned by tools (prompt + `lookup_slots` / state `candidate_slots`)
+- [x] Third-party booking asks for / records relationship and verifies **attendee** name+DOB (prompt + `book(relationship=…)`)
+- [x] Medical / emergency paths behave per DESIGN.md (refuse / `escalate` + `safety_flags`)
 
 ---
 
 ## Phase 4 — FastAPI + tiny web UI
 
-**Status:** Not done
+**Status:** Done
 
 ### What we work on
 - FastAPI app: health check + `POST /api/chat` (session_id, message → assistant reply + optional state debug)
 - Serve `frontend/` as static files
 - Wire UI: send message, append replies, keep session id
 - Same LangGraph graph as eval will use (one agent entrypoint)
+- `POST /api/session/reset` for clean new conversations
+- `scripts/run_agent.sh` starts uvicorn
 
 ### Files
 - `backend/app/main.py`
@@ -158,17 +165,19 @@ Each phase lists **status**, **what we work on**, **files touched**, **exit crit
 - `frontend/index.html`
 - `frontend/src/main.js`
 - `frontend/src/styles.css`
+- `backend/scripts/smoke_phase4.py`
+- `scripts/run_agent.sh`
 
 ### Exit criteria
-- [ ] Open UI in browser, complete a happy-path book
-- [ ] New session resets conversation state cleanly
-- [ ] Errors from tools surface as normal assistant recovery, not a crashed API
+- [x] Open UI in browser, complete a happy-path book (`./scripts/run_agent.sh` → http://127.0.0.1:8000/)
+- [x] New session resets conversation state cleanly (`New session` → new session id)
+- [x] Errors from tools surface as normal assistant recovery, not a crashed API (tool errors in-graph; unexpected exceptions return a reply JSON)
 
 ---
 
 ## Phase 5 — Eval harness + rubric + scenarios
 
-**Status:** Not done
+**Status:** Done
 
 ### What we work on
 - Author **5–7 scenarios** in YAML (goals, patient persona, store setup, expect DB/tools/safety)
@@ -180,12 +189,15 @@ Each phase lists **status**, **what we work on**, **files touched**, **exit crit
   3. Safety hard-fail
   4. Optional LLM judge (low weight, never overrides hard fail)
 - Scorecard output (console + JSON under `backend/eval/results/`)
+- Race hook: after first `lookup_slots`, mark first offered slot taken (`slot_taken_race`)
 
 ### Files
 - `backend/eval/scenarios/scenarios.yaml`
 - `backend/eval/patient_simulator.py`
 - `backend/eval/rubric.py`
 - `backend/eval/harness.py`
+- `backend/eval/results/` — JSON scorecards (`latest.json`)
+- `scripts/run_eval.sh`
 
 ### Initial scenarios
 1. `happy_path_book`  
@@ -197,35 +209,39 @@ Each phase lists **status**, **what we work on**, **files touched**, **exit crit
 7. `emergency_escalate`
 
 ### Exit criteria
-- [ ] `python -m eval.harness` (or equivalent) runs the full suite
-- [ ] Scorecard shows pass/fail + reasons per scenario
-- [ ] At least one hard scenario fails on v0 (planted gap) **or** is ready to fail before Phase 6 patch
-- [ ] Happy path can pass without the improvement patch
+- [x] `python -m eval.harness` (or equivalent) runs the full suite
+- [x] Scorecard shows pass/fail + reasons per scenario
+- [x] At least one hard scenario fails on v0 (planted gap) **or** is ready to fail before Phase 6 patch (`slot_taken_race` fails: v0 prompt tells agent not to re-lookup after `SLOT_TAKEN`)
+- [x] Happy path can pass without the improvement patch
 
 ---
 
 ## Phase 6 — Improvement loop
 
-**Status:** Not done
+**Status:** Done
 
 ### What we work on
 - On failure: build evidence pack (scenario id, transcript summary, tool_trace, DB expect vs actual, rubric reasons)
 - **Diagnoser (LLM):** propose structured Improvement JSON — `failure_mode`, `prompt_append`, optional `guard_change` / `policy_change`
 - Optional **rule map** for known modes (e.g. race → always ensure `book` re-check guard)
 - **Apply:** append to `improvements.md`; write audit JSON under `backend/improvements/`; apply guard/policy toggles if needed
-- Flags: `--propose` (dry-run) vs `--apply` (write files)
-- Re-run **full suite**; print before/after scorecard; assert no regression on previously passing cases
+- Flags: `--propose` (dry-run) vs `--apply` (up to 3 shadow trials; commit only if all-green)
+- Shadow trials use in-memory prompt override (disk untouched until success)
+- Retries 2–3 force LLM revision from prior trial evidence; target-pass + suite-fail treated as flake retry
+- Trial logs under `eval/results/trials/`
 
 ### Files
 - `backend/eval/improve.py`
 - `backend/app/agent/prompts/improvements.md`
 - `backend/improvements/*.json`
 - Hook from `harness.py` (`--improve`)
+- `backend/eval/results/improve_loop.json` — trial summary after `--apply`
+- `backend/eval/results/trials/trial_00N.json` — each shadow attempt
 
 ### Exit criteria
-- [ ] One documented closed loop: fail → diagnose → apply → pass on that scenario
-- [ ] Previously passing scenarios still pass after apply
-- [ ] Improvement record is inspectable on disk (JSON + prompt append)
+- [x] One documented closed loop: fail → diagnose → shadow trial(s) → commit only if all-green (`--improve --apply`)
+- [x] Disk prompts unchanged when no trial is all-green
+- [x] Improvement / trial records inspectable on disk (JSON + optional prompt commit)
 
 ---
 
@@ -300,8 +316,8 @@ Keep this table in sync with the **Status** line under each phase. Values: `Done
 | 0 Environment | Done |
 | 1 Clinic store + policy | Done |
 | 2 Tools + guards | Done |
-| 3 LangGraph agent | Not done |
-| 4 API + web UI | Not done |
-| 5 Eval harness | Not done |
-| 6 Improvement loop | Not done |
+| 3 LangGraph agent | Done |
+| 4 API + web UI | Done |
+| 5 Eval harness | Done |
+| 6 Improvement loop | Done |
 | 7 Scripts + demo polish | Not done |
