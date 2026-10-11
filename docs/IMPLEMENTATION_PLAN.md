@@ -292,17 +292,6 @@ Phase 7 (polish + docs)
 
 ---
 
-## What we explicitly defer (out of phases)
-
-- Voice / telephony  
-- Real EHR / calendar APIs  
-- Multi-provider marketplace  
-- Fine-tuning / DSPy-GEPA prompt search  
-- Nightly GitHub Actions self-edit cron  
-- Large scenario farm / admin dashboard  
-
----
-
 ## Tracking
 
 Keep this table in sync with the **Status** line under each phase. Values: `Done` or `Not done`. Mark `Done` only when that phase’s exit criteria are met.

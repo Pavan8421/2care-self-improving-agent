@@ -10,30 +10,11 @@
 
 Build a **text** multi-turn patient appointment scheduling agent that uses tools to do real work, an **evaluation harness** that scores hard scenarios (not only happy path), and an **improvement loop** that turns a failure into a structured fix, re-runs the suite, and shows the score move **without regressing** what already passed.
 
-We are not building voice, a real EHR, or a large multi-clinic product. Judgment over surface area.
-
 ---
 
-## 2. Assumptions (explicit)
+## 2. Assumptions
 
-| Assumption | Choice |
-|---|---|
-| Interface | Text chat (tiny web UI + same graph for eval) |
-| Clinic | One clinic, one provider |
-| Language | English |
-| Calendar / PHI | Fake in-memory store; no real patient data |
-| Identity | Verify the **appointment patient** by **name + DOB** |
-| Third-party booking | Allowed if a **relationship note** is captured (e.g. spouse, parent); booker schedules for the verified attendee |
-| Soft confirm | Required before every `book` |
-| Cancel policy | Hard **24-hour** window |
-| Slot race | On stale slot: tool fails → agent **auto re-looks up** and offers alternatives |
-| Medical advice | Brief refuse; stay on scheduling |
-| Emergency | Fixed escalate script + `escalate` tool; stop booking that turn |
-| Eval patient | LLM-as-patient for harness; humans use the web UI |
-| Models | OpenAI (`AGENT_MODEL`, `PATIENT_MODEL`) |
-| Improvement apply | Shadow-test prompt patches in memory; commit upsert/`system_replace` only if suite all-green; guards stay authoritative in code |
-
-If real clinics differ (authorization for proxies, local emergency numbers), that is out of scope; noted here as a deliberate simplification.
+Text chat over a fake in-memory clinic (no real PHI). Verify the attendee by **name + DOB**; third-party booking needs a short **relationship** note. Soft-confirm before every book; hard **24h** cancel window. On `SLOT_TAKEN`, re-lookup and offer alternatives. Prompt patches are **shadow-tested** and committed only if the suite is all-green; code guards stay authoritative.
 
 ---
 
@@ -120,11 +101,7 @@ Minimal graph (avoid sprawling FSMs):
 
 Pre-commit checks live **inside tool guards**, not as many graph nodes, so the weekend graph stays readable. Soft-confirm is a first-class tool (`confirm_slot`) so the harness can see it in `tool_trace`.
 
-### 4.4 Why not a big FSM?
-
-Phases (identify → constraints → offer → confirm → book) are **prompt guidance** plus state fields, not hard graph edges. Real conversations skip and revisit steps; a rigid FSM fights that. We encode only the **non-negotiables** as guards: no book without verify + soft-confirm + relationship; cancel/reschedule respect policy; book always re-checks availability.
-
-### 4.5 Session state
+### 4.4 Session state
 
 Maintained in graph state (and returned to the client for debugging/eval):
 
@@ -142,7 +119,7 @@ Maintained in graph state (and returned to the client for debugging/eval):
 | `safety_flags` | e.g. `medical_advice`, `emergency` |
 | `tool_trace` | Calls + results for scoring |
 
-### 4.6 Dialogue policy (phases)
+### 4.5 Dialogue policy (phases)
 
 1. **Identify** — Collect name + DOB of who will attend; `get_patient`.  
 2. **Relationship** — If booker ≠ attendee wording, require a short relationship note before booking.  
@@ -153,7 +130,7 @@ Maintained in graph state (and returned to the client for debugging/eval):
 7. **Commit** — `book` / `cancel` / `reschedule`.  
 8. **Close** — Read back tool-confirmed details.
 
-### 4.7 Safety
+### 4.6 Safety
 
 | Signal | Behavior |
 |---|---|
@@ -162,7 +139,7 @@ Maintained in graph state (and returned to the client for debugging/eval):
 
 Eval **hard-fails** if the agent gives clinical advice or books through an emergency turn.
 
-### 4.8 Prompt layout and planted gap
+### 4.7 Prompt layout and planted gap
 
 - `system.md` — role, phases, never invent slots/IDs, soft confirm, third-party rule, safety.  
 - `improvements.md` — **upserted** sections keyed by `failure_mode` (replace, don’t stack forever).  
@@ -323,54 +300,3 @@ Run suite against disk prompts
 ### 7.4 Flake handling
 
 If the **target** scenario passes in a shadow trial but the suite is not all-green, that is treated as a likely **flake** (LLM variance elsewhere), not as proof the patch is wrong. The loop records the trial, may revise once more with that evidence, and still refuses to commit unless a later trial is fully green.
-
-### 7.5 What we will not do
-
-- Fine-tune a model  
-- Regenerate the entire system prompt from scratch with no structure  
-- Write patches to disk before a green shadow suite  
-- “Try harder” freeform feedback without a scored re-run  
-
----
-
-## 8. Tiny web UI
-
-Single-page chat: message list + composer, calling `POST /api/chat` (session id). No dashboard, no cards-heavy marketing UI. Exists so reviewers (and we) can exercise multi-turn behavior manually for the Loom.
-
----
-
-## 9. Deliverables mapping
-
-| Submit item | How this design covers it |
-|---|---|
-| Runnable agent | `scripts/run_agent.sh` → FastAPI + UI |
-| Eval loop command | `scripts/run_eval.sh` → harness ± `--improve` |
-| Loom | Manual chat + one failing eval → patch → re-run score delta |
-| Design note ≤1 page | `docs/DESIGN_NOTE_1P.md` (pointer to this full DESIGN.md) |
-| AI vs judgment | Note in submission: AI for scaffolding/boilerplate; human judgment on scenarios, rubric weights, guards, third-party/verify rules, refusing transcript-only scoring |
-
----
-
-## 10. Context framework (how we avoid “agent mistakes”)
-
-| Bucket | How we handle it |
-|---|---|
-| Known knowns | Spec in this doc + README commands |
-| Known unknowns | Decided above (stack, 24h, soft confirm, etc.) |
-| Unknown knowns | Encode in prompt, tools, guards, rubric (verify attendee, no invented slots, soft confirm, safety) |
-| Unknown unknowns | Discover via scenarios; convert to structured patches in the loop |
-
----
-
-## 11. Non-goals
-
-Voice/telephony, real calendar/EHR, multi-provider marketplace, production auth, waitlist product, fine-tuning, large scenario farms, admin dashboards.
-
----
-
-## 12. Success criteria
-
-1. Multi-turn scheduling conversation via UI with tool-backed bookings.  
-2. Eval suite scores ≥5 scenarios including hard cases.  
-3. At least **one** demonstrated closed loop with before/after scores and no regression on previously passing cases.  
-4. Design choices (state, guards, rubric limits) are visible and documented.
