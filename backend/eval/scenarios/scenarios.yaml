@@ -1,4 +1,4 @@
-# Eval scenario suite (Phase 5). Seeded patients: Alice, Bob, Carol.
+# Eval scenario suite (Phase 5). Seeded patients: Alice, Bob, Carol, Pavan.
 # Clinic clock + slots are relative to setup.now (see ClinicStore._seed_slots).
 
 scenarios:

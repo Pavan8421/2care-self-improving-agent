@@ -100,6 +100,7 @@ def _seed_patients() -> dict[PatientId, Patient]:
         Patient(patient_id="pat_alice", name="Alice Nguyen", dob="1990-03-12"),
         Patient(patient_id="pat_bob", name="Bob Martinez", dob="1985-07-04"),
         Patient(patient_id="pat_carol", name="Carol Singh", dob="1978-11-22"),
+        Patient(patient_id="pat_pavan", name="Pavan", dob="2004-06-26"),
     ]
     return {p.patient_id: p for p in patients}
 

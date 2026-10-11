@@ -1,7 +1,7 @@
 # Applied improvements (appended by the eval improvement loop).
 # Empty at v0 so a planted failure (slot race recovery) can demonstrate the closed loop.
 
-## 20261010_185113 — slot_taken_race
+## 20261011_131554 — slot_taken_race
 <!-- failure_mode: no_reoffer_after_slot_taken | source: rule_map -->
 
 ### OVERRIDE — Slot conflicts

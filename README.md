@@ -49,7 +49,7 @@ Always run Python modules from `backend/` (so `app.*` / `eval.*` import cleanly)
 ./scripts/run_eval.sh --improve --apply     # ≤3 shadow trials; commit if all-green
 ```
 
-Demo patients in the fake clinic: **Alice Nguyen** `1990-03-12`, **Bob Martinez** `1985-07-04`, **Carol Singh** `1978-11-22`.
+Demo patients in the fake clinic: **Alice Nguyen** `1990-03-12`, **Bob Martinez** `1985-07-04`, **Carol Singh** `1978-11-22`, **Pavan** `2004-06-26`.
 
 Artifacts: `backend/eval/results/latest.json`, trials under `backend/eval/results/trials/`, audits under `backend/improvements/`.
 
